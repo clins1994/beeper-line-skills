@@ -18,8 +18,9 @@ Usage:
 
 "redacted", "approved", "approval" and "redacted_sha256" are set by
 `redact.py final` only. An output stays valid only while the raw image and
-its boxes still match the approval it was written under, and the file on
-disk is the one that was written. Every command here (and detect.py and
+its boxes still match the approval it was written under (checked while the
+raw image exists; after raw/ is deleted the approved file is kept), and the
+file on disk is the one that was written. Every command here (and detect.py and
 redact.py) deletes outputs that no longer pass, so nothing unapproved is
 left outside raw/. line-pr uploads only what `eligible` prints.
 """
@@ -60,16 +61,23 @@ def find(m, rel_raw):
 
 
 def current(feat, entry):
-    """True when the entry's redacted file is still backed by a valid approval."""
-    if not entry.get("redacted") or not entry.get("approved"):
+    """True when the entry's redacted file is still backed by a valid approval.
+
+    The file on disk must be the one `final` wrote. While the raw image is
+    there, it and its boxes must still match the approval. Once the user has
+    deleted raw/ (after the PR is merged), the approved file is kept as it is:
+    nothing can have changed what it was approved from.
+    """
+    if not entry.get("redacted") or not entry.get("approved") or not entry.get("approval"):
         return False
     out = os.path.join(feat.evidence, entry["redacted"])
-    raw = os.path.join(feat.evidence, entry["raw"])
-    if not (os.path.exists(out) and os.path.exists(raw)):
+    if not os.path.exists(out) or sha256_file(out) != entry.get("redacted_sha256"):
         return False
+    raw = os.path.join(feat.evidence, entry["raw"])
+    if not os.path.exists(raw):
+        return True
     data = load_json(feat.box_path(raw), None)
-    return (is_approved(data, raw) and data["approved"]["hash"] == entry.get("approval")
-            and sha256_file(out) == entry.get("redacted_sha256"))
+    return is_approved(data, raw) and data["approved"]["hash"] == entry["approval"]
 
 
 def drop_output(feat, entry):
@@ -78,7 +86,7 @@ def drop_output(feat, entry):
         out = os.path.join(feat.evidence, entry["redacted"])
         if os.path.exists(out):
             os.remove(out)
-            print(f"removed stale {entry['redacted']}")
+            print(f"removed stale {entry['redacted']}", file=sys.stderr)
     entry.update(redacted=None, approved=False, approval=None, redacted_sha256=None)
 
 
