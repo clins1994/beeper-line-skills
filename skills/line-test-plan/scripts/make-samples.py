@@ -204,15 +204,23 @@ def main():
     os.makedirs(a.out_dir, exist_ok=True)
 
     made, skipped = [], []
-    for spec in SPECS:
-        num, name, ext, kind, w, h = spec
-        if kind not in kinds or (only and num not in only):
-            continue
-        ok, note = build(*spec, a.out_dir)
-        fname = f"{num:02d}-{name}.{ext}"
-        if not ok and os.path.exists(os.path.join(a.out_dir, fname)):
-            os.remove(os.path.join(a.out_dir, fname))  # ffmpeg can leave a partial file behind
-        (made if ok else skipped).append((fname, f"{num:02d}-{name}", note, os.path.join(a.out_dir, fname)))
+    # Build into a scratch folder and move a file in only when it succeeded: a failed
+    # encoder (ffmpeg can leave a partial file) never replaces or leaves a file in out_dir,
+    # and a sample from an earlier run survives a rerun that cannot rebuild it.
+    scratch = tempfile.mkdtemp(prefix=".build-", dir=a.out_dir)
+    try:
+        for spec in SPECS:
+            num, name, ext, kind, w, h = spec
+            if kind not in kinds or (only and num not in only):
+                continue
+            ok, note = build(*spec, scratch)
+            fname = f"{num:02d}-{name}.{ext}"
+            path = os.path.join(a.out_dir, fname)
+            if ok:
+                os.replace(os.path.join(scratch, fname), path)
+            (made if ok else skipped).append((fname, f"{num:02d}-{name}", note, path))
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
 
     # Rebuild the manifest from every sample on disk, so a partial rerun
     # (for example --kinds video after images) keeps the earlier labels.
