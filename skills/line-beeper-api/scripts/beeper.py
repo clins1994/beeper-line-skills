@@ -424,9 +424,25 @@ def comparable(m):
 
 def cmd_diff(args):
     a, b = (json.loads(Path(p).read_text()) for p in (args.before, args.after))
+    # An after snapshot taken with --limit can still hold the before phase's
+    # messages. Drop those (same message ID), so a repeated sample is compared
+    # with its new send, not with itself. If every message is shared, the same
+    # messages were read twice: compare them all.
+    before_ids = {m.get("id") for m in a["messages"]} - {None}
+    newer = [m for m in b["messages"] if m.get("id") not in before_ids]
+    skipped = len(b["messages"]) - len(newer) if newer else 0
+    after_msgs = newer or b["messages"]
+
+    # Newest first, so a sample that a snapshot holds more than once (an older
+    # test run) pairs its latest copy in each snapshot.
+    def newest_first(msgs):
+        return sorted(msgs, key=lambda m: m.get("timestamp") or "", reverse=True)
+
     sa, sb = {}, {}
-    before = {diff_key(m, sa): comparable(m) for m in reversed(a["messages"])}
-    after = {diff_key(m, sb): comparable(m) for m in reversed(b["messages"])}
+    before = {diff_key(m, sa): comparable(m) for m in newest_first(a["messages"])}
+    after = {diff_key(m, sb): comparable(m) for m in newest_first(after_msgs)}
+    if skipped:
+        print(f"skipped {skipped} message(s) in {args.after} that are also in {args.before}")
     changed = 0
     for key in list(before) + [k for k in after if k not in before]:
         x, y = before.get(key), after.get(key)

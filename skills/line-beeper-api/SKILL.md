@@ -92,7 +92,9 @@ python3 $S diff test/<slug>/beeper/before.json test/<slug>/beeper/after.json
   attachment hint: `image`, `video`, `audio`, `file`, `gif`, `voice-note`,
   `sticker`.
 - **`snapshot` / `diff`** save these summaries and compare two of them. Messages
-  are matched by attachment file name, else by text. Make the
+  are matched by attachment file name, else by text. `diff` skips messages in
+  the after snapshot that the before snapshot already has (same message ID),
+  so an after snapshot that still reaches back into the before phase is fine. Make the
   sample file names and test strings unique (`line-test-plan` samples already
   are), and put the step ID in test texts (`B1 …`).
 
