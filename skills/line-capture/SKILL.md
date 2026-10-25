@@ -75,6 +75,10 @@ and refuses to start outside the checkout.
    - Perform whatever flow they want to analyze
    - Do not open DevTools on the extension: LINE has `debugger;` traps that
      pause it, and the recorder does not need DevTools
+   - Windows the extension opens (Settings, group popups) can start frozen
+     and blank, with LINE greyed out as "Debugger paused in another tab". The
+     recorder releases them automatically. If one still freezes, quit Chrome
+     and run the capture again.
    - When done, quit Chrome completely (all windows, not only the tab)
 
 5. Once Chrome is closed, the capture files are ready. Continue with the
