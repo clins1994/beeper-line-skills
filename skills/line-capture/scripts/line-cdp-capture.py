@@ -76,6 +76,7 @@ class CDPCapture:
         self.pending_post_requests = {}  # msg_id -> requestId
         self.extra_headers = {}  # requestId -> headers from requestWillBeSentExtraInfo
         self.sessions = {}  # sessionId -> targetInfo
+        self.target_sessions = {}  # targetId -> sessionId
 
         self.running = True
 
@@ -149,6 +150,11 @@ class CDPCapture:
         self.ws.send(json.dumps(msg))
         return mid
 
+    def release_target(self, session_id: str, target_type: str):
+        """Let a page-like target run if it is held waiting for a debugger."""
+        if target_type in ("page", "iframe", "other"):
+            self.send_to_session(session_id, "Runtime.runIfWaitingForDebugger")
+
     def handle_event(self, msg: dict):
         method = msg.get("method", "")
         params = msg.get("params", {})
@@ -168,19 +174,32 @@ class CDPCapture:
                 "maxTotalBufferSize": 100 * 1024 * 1024,
                 "maxResourceBufferSize": 10 * 1024 * 1024,
             })
-            # Windows opened by the extension (e.g. the per-group popup.html)
-            # can arrive held at "waiting for debugger" even with
-            # waitForDebuggerOnStart off. Left alone they stay blank and grey
-            # out the extension with "Debugger paused in another tab".
-            if params.get("waitingForDebugger"):
-                self.send_to_session(sid, "Runtime.runIfWaitingForDebugger")
+            # Windows opened by the extension (the per-group popup.html, the
+            # Settings window) can arrive held at "waiting for debugger" even
+            # with waitForDebuggerOnStart off, and Chrome does not always set
+            # waitingForDebugger on the event. Left alone they stay blank and
+            # grey out the extension with "Debugger paused in another tab".
+            # runIfWaitingForDebugger is a no-op on a running target, so send
+            # it to every page-like target whatever the flag says.
+            self.release_target(sid, ttype)
             # Track session -> target mapping
             self.sessions[sid] = target_info
+            self.target_sessions[target_info.get("targetId", "")] = sid
+            return
+
+        # A window can start waiting after attach (it attaches with an empty
+        # URL and navigates), so release again whenever its info changes.
+        if method == "Target.targetInfoChanged":
+            info = params.get("targetInfo", {})
+            sid = self.target_sessions.get(info.get("targetId", ""))
+            if sid:
+                self.release_target(sid, info.get("type", ""))
             return
 
         if method == "Target.detachedFromTarget":
             sid = params.get("sessionId", "")
             target = self.sessions.pop(sid, {})
+            self.target_sessions.pop(target.get("targetId", ""), None)
             print(f"  Detached from [{target.get('type', '?')}] {target.get('title', '?')}", file=sys.stderr)
             return
 
