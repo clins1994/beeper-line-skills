@@ -101,6 +101,13 @@ A feature goal, for example: `Support Matrix group avatar changes by matching LI
    - If available, run `staticcheck $(go list ./... | grep -v /ltsm)`.
    - Before finishing, report where raw captures live and ask whether to delete them. Prefer keeping only redacted notes/docs.
 
+## Evidence
+
+After testing the feature, the `line-evidence` skill turns the screenshots into
+PR evidence: it collects them, lets the user pick from a local contact sheet,
+covers everything that is not test data, and writes approved PNGs and a manifest
+to `test/<feature>/evidence/`. Raw screenshots never leave the machine.
+
 ## Automation notes
 
 - The capture launcher pre-skips Chrome's first-run prompts. Keep the default browser checkbox off, usage/crash reporting off, and Chrome/Sync signed out. If the sign-in page still shows, choose "Stay Signed Out"; only LINE login is manual.
