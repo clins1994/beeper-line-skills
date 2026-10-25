@@ -212,10 +212,15 @@ def main():
         fname = f"{num:02d}-{name}.{ext}"
         (made if ok else skipped).append((fname, f"{num:02d}-{name}", note, os.path.join(a.out_dir, fname)))
 
+    # Rebuild the manifest from every sample on disk, so a partial rerun
+    # (for example --kinds video after images) keeps the earlier labels.
     with open(os.path.join(a.out_dir, "MANIFEST.txt"), "w", encoding="utf-8") as f:
         f.write("file\tlabel\tbytes\n")
-        for fname, label, _, path in made:
-            f.write(f"{fname}\t{label}\t{os.path.getsize(path)}\n")
+        for num, name, ext, _, _, _ in SPECS:
+            fname = f"{num:02d}-{name}.{ext}"
+            path = os.path.join(a.out_dir, fname)
+            if os.path.isfile(path):
+                f.write(f"{fname}\t{num:02d}-{name}\t{os.path.getsize(path)}\n")
 
     print(f"made {len(made)} sample(s) in {a.out_dir}")
     for fname, _, _, path in made:

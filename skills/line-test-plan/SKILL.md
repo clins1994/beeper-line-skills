@@ -34,7 +34,7 @@ Other skills read this layout (`line-evidence` relies on it), so keep it exact.
   4. `## Test data`: a bullet per dummy string used in tests (group names, message text, sample file labels). `line-evidence` treats this as the allowlist of text that is not PII
   5. `## Run order`: which sections run in which phase
   6. lettered sections `## A. Title`, each with one table
-  7. `## Findings`: a link to `FINDINGS.md` (written later by `line-analyze`; the plan only links to it)
+  7. `## Findings`: a link to `FINDINGS.md` (the agent writes it in the analyze phase, after `line-analyze` has parsed the capture; the plan only links to it)
 - Step IDs match `^[A-Z][0-9]+$` (`A1`, `B12`) and are unique across the plan.
 - Every table has exactly these columns: `#`, `Platform`, `Phase`, `Action`, `Checks`, `Evidence`, `Result`.
   - `Phase` is `before`, `capture` or `after`.
@@ -86,15 +86,16 @@ Other skills read this layout (`line-evidence` relies on it), so keep it exact.
 
 6. **Sample media, when the feature needs files.**
    - Run `bash <skill-dir>/scripts/line-test-plan-preflight.sh` (on Windows, from Git Bash). It prints `OK`, `MISSING` (required) or `OPTIONAL` per dependency and does not say how to install anything: choose the install method that fits the detected OS and package managers (for example `<python> -m pip install --user Pillow`), show the commands, ask the user to confirm, install, and re-run until it exits 0.
+   - Use the Python the preflight found (`py -3` on Windows only; a `PYTHON` override is respected): `eval "$(bash <skill-dir>/scripts/line-test-plan-preflight.sh --print-env)"` sets the `PYTHON` array, and the commands below run it as `"${PYTHON[@]}"`.
    - Generate labeled samples:
      ```bash
-     python3 <skill-dir>/scripts/make-samples.py test/<feature-slug>/samples --kinds image,animated
+     "${PYTHON[@]}" <skill-dir>/scripts/make-samples.py test/<feature-slug>/samples --kinds image,animated
      ```
      `--kinds` takes `image`, `animated`, `video`, `shape`; `--only 10,21` picks files by number. Every file shows its own name and corner markers, so a screenshot proves which file was sent and how it was cropped.
    - It runs on macOS, Linux and Windows with Python 3.8+ and Pillow. Video (MP4, HEVC, MOV, WebM) needs `ffmpeg`; HEIC and AVIF need `pillow-heif` or an `ffmpeg` with the encoder. Whatever it cannot encode is listed as skipped: tell the user, and do not put those files in the plan.
    - Put each file name in the plan's steps and its label (from `samples/MANIFEST.txt`) in `## Test data`.
 
-7. **Validate and hand over.** Run `python3 <skill-dir>/scripts/check-plan.py test/<feature-slug>/PLAN.md` and fix what it reports. Then tell the user how to run it:
+7. **Validate and hand over.** Run `"${PYTHON[@]}" <skill-dir>/scripts/check-plan.py test/<feature-slug>/PLAN.md` (set `PYTHON` as in step 6; do it here too if the feature has no media) and fix what it reports. Then tell the user how to run it:
    - **Pacing:** do one step, wait about 10 seconds, then the next. The gaps let the analysis match each step to its network calls. Other-device steps need about 15 seconds before the next one.
    - **Result column:** say it as you go ("A3 saved", "B4 greyed out", "C2 error: ..."). Mark `✅` accepted or working, `❌` rejected or broken (copy the error text), `n/a` with the reason when the step cannot be done, and add notes on cropping, animation or timing.
    - **Order:** all `before` steps, then log the bridge out and start the capture for the `capture` steps, then deploy and run the `after` steps.
@@ -103,7 +104,7 @@ Other skills read this layout (`line-evidence` relies on it), so keep it exact.
    edit the matching `Result` cell right away, with the step ID. If a report
    does not match any step, ask. Keep errors verbatim, and leave a step empty
    rather than guessing. When the plan is finished, point to `line-capture` for
-   the capture phase and `line-analyze` for `FINDINGS.md`.
+   the capture phase and `line-analyze` to parse it; the agent then writes `FINDINGS.md` from that analysis.
 
 Never commit the feature folder, and keep captures, tokens, MIDs and real
 account data out of the plan.

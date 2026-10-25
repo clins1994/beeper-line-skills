@@ -68,4 +68,4 @@ Keep the extension open on the test chat. Make each change in the LINE app on yo
 
 ## Findings
 
-[FINDINGS.md](FINDINGS.md) (written by `line-analyze` after the capture).
+[FINDINGS.md](FINDINGS.md) (written by the agent in the analyze phase, after `line-analyze` parses the capture).
