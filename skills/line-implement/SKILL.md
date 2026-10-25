@@ -30,6 +30,8 @@ A feature goal, for example: `Support Matrix group avatar changes by matching LI
 
 ## Workflow
 
+0. **Write the test plan first (optional).** The `line-test-plan` skill turns the goal into a numbered `test/<feature>/PLAN.md` (sections, step IDs, before/capture/after phases, Result column) before any capture or code. The capture contract below can then point at its step IDs.
+
 1. **Understand the goal and the current bridge first.**
    - Read `AGENTS.md`/`CLAUDE.md`, `docs/protocol/README.md`, relevant endpoint docs, and `docs/protocol/gap-analysis.md`.
    - Inspect the likely implementation surface in `pkg/line/`, `pkg/connector/`, and existing tests.

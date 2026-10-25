@@ -16,7 +16,7 @@ npx skills add clins1994/beeper-line-skills --skill='*' -g      # all skills, gl
 npx skills add clins1994/beeper-line-skills --skill line-implement -a claude-code
 ```
 
-Install all three (or `line-implement` together with the other two): `line-implement` uses the scripts of `line-capture` and `line-analyze`. Update later with `npx skills update`.
+Install `line-implement` together with `line-capture` and `line-analyze`: it uses their scripts. `line-test-plan` works on its own. Update later with `npx skills update`.
 
 As a Claude Code plugin (updates with `claude plugin update`):
 
@@ -32,11 +32,13 @@ The plugin names each skill `beeper-line:<skill>`, for example `/beeper-line:lin
 | Skill | What it does |
 |-------|--------------|
 | [line-implement](skills/line-implement/SKILL.md) | The umbrella. Turns a feature goal into a capture contract, captures only the missing evidence, then implements the bridge to match Chrome. Uses the two skills below. |
+| [line-test-plan](skills/line-test-plan/SKILL.md) | Writes the numbered test plan (`test/<feature>/PLAN.md`) before any capture or code: sections, step IDs, before/capture/after phases, Result column, and labeled sample media when the feature needs files. Works on macOS, Linux and Windows (Git Bash). |
 | [line-capture](skills/line-capture/SKILL.md) | Checks dependencies, then launches Chrome with a CDP recorder and net-log to record LINE Chrome Extension traffic. Works on macOS, Linux and Windows (Git Bash). |
 | [line-analyze](skills/line-analyze/SKILL.md) | Parses a capture, redacts tokens and MIDs, and compares the traffic with `pkg/line` and `pkg/connector`. |
 
 ```
-line-implement ──► line-capture ──► line-analyze
+line-implement ──► line-test-plan (optional)
+               ──► line-capture ──► line-analyze
 ```
 
 ## Requirements
