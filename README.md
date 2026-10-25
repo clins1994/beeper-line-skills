@@ -2,7 +2,7 @@
 
 [Agent skills](https://agentskills.io/home) for working on [beeper/line](https://github.com/beeper/line), the Matrix bridge for LINE. They record what the real LINE Chrome Extension does, redact it, compare it with the bridge, and help implement features that match it.
 
-The bridge identifies as the LINE Chrome Extension, so features should copy the extension's captured behavior. These skills are the tooling for that. They run from inside a `beeper/line` checkout and stop if you are somewhere else.
+These skills are completely optional. They are my own way of working on the bridge, kept here so I can change them on my own schedule, and `beeper/line` does not need them. If you want help reverse engineering what the LINE Chrome Extension does, and later an opinionated way to structure the evidence for that kind of work, you can try them. The bridge identifies as the extension, so features should copy its captured behavior; these skills are tooling for that. They run from inside a `beeper/line` checkout and stop if you are somewhere else.
 
 Layout follows [clins1994/skills](https://github.com/clins1994/skills).
 
