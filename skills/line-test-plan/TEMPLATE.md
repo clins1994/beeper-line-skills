@@ -34,12 +34,15 @@ Use test chats. Every change may post a notice that all members see.
 
 Who sends (rows) by where you can see it (columns). Cells are step ID ranges; `-` is not applicable; `gap` is listed under Not testable.
 
-| Sender \ Viewer | LINE iOS | LINE Android | Chrome extension | Beeper Desktop | Beeper mobile |
-|---|---|---|---|---|---|
-| Beeper (before) | A1 | gap | - | A2 | A3 |
-| LINE iOS (reference) | - | gap | C1 | C2 | C3 |
-| Chrome extension | D1 | gap | - | gap | gap |
-| Beeper (after) | E1 | gap | - | E2 | E3 |
+| Sender \ Viewer | LINE iOS | LINE Android | Chrome extension | Beeper Desktop |
+|---|---|---|---|---|
+| Beeper Desktop (before) | A1 | gap | - | A1 |
+| LINE iOS (reference) | E1 | gap | C1 | - |
+| Beeper Desktop (settings) | E2 | gap | - | - |
+| Chrome extension | D1 | gap | B1 | - |
+| Beeper Desktop (after) | F1 | gap | - | F1 |
+
+Keep the rows and columns to what the plan has, and make every cell point at a real step.
 
 ## Not testable
 

@@ -193,6 +193,8 @@ def build(num, name, ext, kind, w, h, out_dir):
     """Returns (ok, note). note explains a skip."""
     label = f"{num:02d}-{name}"
     out = os.path.join(out_dir, f"{label}.{ext}")
+    if min(w, h) < 64:
+        label = f"{num:02d}"  # too small for the full name; MANIFEST.txt maps the number to the file
     transparent = name == "static-transparent"
     try:
         if kind == "ladder":
