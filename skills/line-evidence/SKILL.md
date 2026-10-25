@@ -18,7 +18,7 @@ PR or issue uploads, no chat attachments to other services, no pastebins or
 image hosts, no commits. Open them only from disk. Looking at them yourself
 to find PII is part of this skill; sending them anywhere else is not. Only
 approved files in `evidence/redacted/` may be uploaded later, and only by
-`line-pr` (or the user).
+`line-pr` (or the user), taking the list from `manifest.py eligible`.
 
 ## Check the checkout first
 
@@ -46,7 +46,7 @@ test/<feature-slug>/
       index.json         collected files, their source and time
       contact-sheet.html
       previews/, review.html
-    boxes/<image>.json   boxes per raw image; stores no hidden text
+    boxes/<image file>.json  boxes per raw image, e.g. 20261025-044601.png.json; no hidden text
     redacted/<step>-<platform>-<phase>.png
     manifest.json        step -> files, platform, phase, approved, in_pr
 ```
@@ -108,11 +108,11 @@ the Python the preflight reported.
    ```bash
    python3 $S/redact.py --feature $F preview 20261025-044601.png
    ```
-   This writes `evidence/raw/previews/<image>.png` (left: numbered boxes, red
+   This writes `evidence/raw/previews/<image file>.png` (left: numbered boxes, red
    covered, green visible, blue added; right: the result) and
    `evidence/raw/review.html`, and prints the numbered box list. Look at the
    preview yourself, then give the user the `review.html` path (local only).
-   Apply what they say by editing `evidence/boxes/<image>.json`:
+   Apply what they say by editing `evidence/boxes/<image file>.json`:
    - "unhide 4": add box 4's `id` to `unhide` (for a red box).
    - "hide 9": add box 9's `id` to `hide` (for a green box).
    - "also hide the top bar": append `{"x", "y", "w", "h", "label"}` in pixels
@@ -125,7 +125,10 @@ the Python the preflight reported.
    python3 $S/redact.py --feature $F approve 20261025-044601.png
    python3 $S/redact.py --feature $F final 20261025-044601.png
    ```
-   `approve` stores a hash of the covered boxes; any later box change voids it.
+   `approve` stores a hash of the raw image's bytes and the covered boxes.
+   Replacing the screenshot or changing any box voids it, and the scripts then
+   delete the redacted file made under the old approval, so `redacted/` only
+   ever holds currently approved output.
    `final` needs the approval and a manifest entry, re-encodes to PNG from bare
    pixels (no EXIF, GPS, text chunks or ICC profile), writes
    `evidence/redacted/<step>-<platform>-<phase>.png`, OCRs the result again and
@@ -133,7 +136,8 @@ the Python the preflight reported.
    `manifest.json`. Open each output yourself before calling it done.
 
 7. **Report.** Run `python3 $S/manifest.py --feature $F show` and list the
-   redacted files per step. `manifest.py set --in-pr no <step|file>` leaves a
+   redacted files per step. `manifest.py eligible` prints only files that are
+   approved, unchanged on disk and marked for the PR: that is the upload list. `manifest.py set --in-pr no <step|file>` leaves a
    file out of the PR. Tell the user that `evidence/raw/` still holds the
    unredacted originals and ask whether to delete it once the PR is merged.
 

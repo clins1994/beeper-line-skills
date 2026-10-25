@@ -15,24 +15,25 @@ The preview puts the original with numbered outlines (red: covered, green:
 left visible, blue: added by hand) next to the redacted result, and prints
 the number -> id table. Previews contain raw pixels and stay in raw/.
 
-`approve` stores a hash of the covered rectangles; any later edit to the
-boxes clears the approval. `final` refuses images without a matching
-approval or without a manifest entry (manifest.py pick), re-encodes to PNG
+`approve` stores a hash of the raw image's bytes and the covered
+rectangles; replacing the screenshot or editing any box voids it, and every
+script then deletes the redacted output made under the old approval.
+`final` refuses images without a matching approval or without a manifest
+entry (manifest.py pick), re-encodes to PNG
 with every piece of metadata dropped (EXIF, GPS, text chunks, ICC after
 converting to sRGB), OCRs the result again as a check, and records it in
 manifest.json.
 """
 
 import argparse
-import hashlib
 import html
 import io
-import json
 import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from evidence_lib import Feature, die, load_json, now_iso, parse_plan, save_json  # noqa: E402
+from evidence_lib import (Feature, approval_hash, covers, die, is_approved, load_json, now_iso,  # noqa: E402
+                          numbered, parse_plan, rect, save_json, sha256_file)
 
 try:
     from PIL import Image, ImageDraw, ImageFont
@@ -49,37 +50,6 @@ def load_boxes(feat, image):
     if data is None:
         die(f"no boxes for {os.path.basename(image)}; run detect.py first")
     return path, data
-
-
-def numbered(data):
-    """Every box with its state, sorted top to bottom and numbered from 1."""
-    out = []
-    for b in data["auto"]:
-        out.append(dict(b, state="keep" if b["id"] in data.get("unhide", []) else "cover"))
-    for b in data["kept"]:
-        out.append(dict(b, state="cover" if b["id"] in data.get("hide", []) else "keep"))
-    for i, b in enumerate(data.get("add", [])):
-        out.append(dict(b, id=f"add{i}", kind="added", state="add"))
-    out.sort(key=lambda b: (b["y"], b["x"]))
-    for n, b in enumerate(out, 1):
-        b["n"] = n
-    return out
-
-
-def covers(data):
-    return [b for b in numbered(data) if b["state"] in ("cover", "add")]
-
-
-def rect(b, size):
-    """Padded rectangle, clamped to the image."""
-    pad = 2 if b.get("state") == "add" else max(2, round(min(b["w"], b["h"]) * 0.15))
-    W, H = size
-    return (max(0, b["x"] - pad), max(0, b["y"] - pad), min(W, b["x"] + b["w"] + pad), min(H, b["y"] + b["h"] + pad))
-
-
-def cover_hash(data, size):
-    rects = sorted(rect(b, size) for b in covers(data))
-    return hashlib.sha256(json.dumps(rects).encode()).hexdigest()[:16]
 
 
 def render(im, data):
@@ -117,7 +87,7 @@ def preview(feat, image):
     sheet.paste(marked, (0, 0))
     sheet.paste(after, (im.size[0] + gap, 0))
     os.makedirs(feat.previews, mode=0o700, exist_ok=True)
-    out = os.path.join(feat.previews, os.path.splitext(os.path.basename(image))[0] + ".png")
+    out = feat.preview_path(image)
     sheet.save(out)
     print(f"{os.path.basename(image)} -> {out}")
     for b in boxes:
@@ -130,7 +100,7 @@ def preview(feat, image):
 def write_review(feat, items):
     rows = []
     for image, out, boxes, data in items:
-        approved = (data.get("approved") or {}).get("hash") == cover_hash(data, (data["width"], data["height"]))
+        approved = is_approved(data, image)
         table = "".join(
             f"<tr class={b['state']}><td>{b['n']}</td><td>{b['state']}</td><td>{html.escape(b['kind'])}</td>"
             f"<td><code>{b['id']}</code></td><td>{html.escape(b.get('text') or b.get('label') or '')}</td></tr>"
@@ -172,9 +142,11 @@ def to_srgb(im):
 def final(feat, image, manifest_mod):
     path, data = load_boxes(feat, image)
     size = (data["width"], data["height"])
-    if (data.get("approved") or {}).get("hash") != cover_hash(data, size):
-        die(f"{os.path.basename(image)} is not approved for its current boxes; preview it and get the user's OK")
-    m = manifest_mod.load(feat)
+    # Drop outputs whose approval no longer holds before anything else.
+    m = manifest_mod.sweep(feat)
+    if not is_approved(data, image):
+        die(f"{os.path.basename(image)} is not approved for its current image and boxes; "
+            "preview it and get the user's OK")
     step, entry = manifest_mod.find(m, feat.rel(image))
     if not entry:
         die(f"{os.path.basename(image)} is not in the manifest; run manifest.py pick first")
@@ -192,6 +164,8 @@ def final(feat, image, manifest_mod):
         draw.rectangle(rect(b, size), fill=FILL + ((255,) if mode == "RGBA" else ()))
     # Rebuild from raw pixels so no info, EXIF, ICC or text chunk can survive.
     clean = Image.frombytes(mode, size, drawn.tobytes())
+    if entry.get("redacted"):
+        manifest_mod.drop_output(feat, entry)
     rel = manifest_mod.output_name(m, step, entry)
     out = os.path.join(feat.evidence, rel)
     os.makedirs(feat.redacted, exist_ok=True)
@@ -202,7 +176,7 @@ def final(feat, image, manifest_mod):
             os.remove(out)
             die(f"metadata survived in {out}: {sorted(leftover)}")
     verify(feat, out, data)
-    entry.update(redacted=rel, approved=True)
+    entry.update(redacted=rel, approved=True, approval=data["approved"]["hash"], redacted_sha256=sha256_file(out))
     manifest_mod.save(feat, m)
     print(f"{os.path.basename(image)} -> {out}")
 
@@ -250,7 +224,7 @@ def main():
         items = []
         for e in feat.load_index() or [{"file": f} for f in sorted(os.listdir(feat.raw))]:
             image = os.path.join(feat.raw, e["file"])
-            out = os.path.join(feat.previews, os.path.splitext(e["file"])[0] + ".png")
+            out = feat.preview_path(image)
             if os.path.exists(out) and os.path.exists(feat.box_path(image)):
                 _, data = load_boxes(feat, image)
                 items.append((image, out, numbered(data), data))
@@ -258,9 +232,13 @@ def main():
     elif a.cmd == "approve":
         for image in images:
             path, data = load_boxes(feat, image)
-            data["approved"] = {"hash": cover_hash(data, (data["width"], data["height"])), "at": now_iso()}
+            data["approved"] = {"hash": approval_hash(data, image), "at": now_iso()}
             save_json(path, data)
             print(f"approved {os.path.basename(image)} ({len(covers(data))} covers)")
+        # A new approval makes any output written under the old one stale.
+        import manifest
+
+        manifest.sweep(feat)
     else:
         import manifest
 

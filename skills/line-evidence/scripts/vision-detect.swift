@@ -51,7 +51,7 @@ for (lineIndex, obs) in (text.results ?? []).enumerated() {
         var end = idx
         while end < s.endIndex && !s[end].isWhitespace { end = s.index(after: end) }
         if idx < end {
-            let r = (try? cand.boundingBox(for: idx..<end))??.boundingBox ?? obs.boundingBox
+            let r = (try? cand.boundingBox(for: idx..<end))?.boundingBox ?? obs.boundingBox
             var w: [String: Any] = box(r)
             w["text"] = String(s[idx..<end])
             w["line"] = lineIndex

@@ -29,6 +29,7 @@ import sys
 import unicodedata
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import manifest  # noqa: E402
 from evidence_lib import PII, SAFE_WORD, Feature, die, load_json, norm, parse_plan, save_json, ui_phrases, words  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -226,6 +227,8 @@ def main():
             "approved": old.get("approved"),
         }
         save_json(path, data)
+        # New boxes can void the approval; delete outputs written under it.
+        manifest.sweep(feat)
         kinds = {}
         for b in auto:
             kinds[b["kind"]] = kinds.get(b["kind"], 0) + 1

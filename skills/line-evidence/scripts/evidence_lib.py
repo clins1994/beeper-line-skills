@@ -1,5 +1,6 @@
 """Shared helpers for the line-evidence scripts: paths, PLAN.md, allowlist."""
 
+import hashlib
 import json
 import os
 import re
@@ -89,8 +90,12 @@ class Feature:
             with open(ignore, "w") as f:
                 f.write("# Unredacted screenshots: never commit or share.\n*\n")
 
+    # Keyed by the full file name, so a.png and a.jpg never share boxes or a preview.
     def box_path(self, image):
-        return os.path.join(self.boxes, os.path.splitext(os.path.basename(image))[0] + ".json")
+        return os.path.join(self.boxes, os.path.basename(image) + ".json")
+
+    def preview_path(self, image):
+        return os.path.join(self.previews, os.path.basename(image) + ".png")
 
     def raw_image(self, name):
         """Resolve an image argument (name, raw/ name or path) to a path inside raw/."""
@@ -104,6 +109,54 @@ class Feature:
 
     def load_index(self):
         return load_json(self.index, [])
+
+
+def sha256_file(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def numbered(data):
+    """Every box with its state, sorted top to bottom and numbered from 1."""
+    out = []
+    for b in data["auto"]:
+        out.append(dict(b, state="keep" if b["id"] in data.get("unhide", []) else "cover"))
+    for b in data["kept"]:
+        out.append(dict(b, state="cover" if b["id"] in data.get("hide", []) else "keep"))
+    for i, b in enumerate(data.get("add", [])):
+        out.append(dict(b, id=f"add{i}", kind="added", state="add"))
+    out.sort(key=lambda b: (b["y"], b["x"]))
+    for n, b in enumerate(out, 1):
+        b["n"] = n
+    return out
+
+
+def covers(data):
+    return [b for b in numbered(data) if b["state"] in ("cover", "add")]
+
+
+def rect(b, size):
+    """Padded rectangle, clamped to the image."""
+    pad = 2 if b.get("state") == "add" else max(2, round(min(b["w"], b["h"]) * 0.15))
+    W, H = size
+    return (max(0, b["x"] - pad), max(0, b["y"] - pad), min(W, b["x"] + b["w"] + pad), min(H, b["y"] + b["h"] + pad))
+
+
+def approval_hash(data, image):
+    """Hash of the raw image's bytes and the covered rectangles.
+
+    An approval is only valid while this matches: replacing the screenshot or
+    changing any box voids it.
+    """
+    rects = sorted(rect(b, (data["width"], data["height"])) for b in covers(data))
+    return hashlib.sha256(json.dumps([sha256_file(image), rects]).encode()).hexdigest()[:16]
+
+
+def is_approved(data, image):
+    return bool(data) and (data.get("approved") or {}).get("hash") == approval_hash(data, image)
 
 
 def load_json(path, default):

@@ -6,16 +6,22 @@ Usage:
   manifest.py --feature test/<slug> unpick RAW...
   manifest.py --feature test/<slug> set --in-pr yes|no TARGET...    # TARGET: step ID, raw or redacted file
   manifest.py --feature test/<slug> show
+  manifest.py --feature test/<slug> eligible                       # files line-pr may upload
 
 --platform and --phase default to the step's row in PLAN.md. Shape:
 
   {"feature": "<slug>", "updated": "<iso>",
    "steps": {"B5": [{"raw": "raw/<file>", "platform": "LINE iOS", "phase": "after",
                      "redacted": "redacted/B5-line-ios-after.png" | null,
-                     "approved": false, "in_pr": true, "note": ""}]}}
+                     "approved": false, "approval": "<hash>" | null,
+                     "redacted_sha256": "<hex>" | null, "in_pr": true, "note": ""}]}}
 
-"redacted" and "approved" are set by `redact.py final` only. line-pr uploads
-only entries with approved true, a redacted file, and in_pr true.
+"redacted", "approved", "approval" and "redacted_sha256" are set by
+`redact.py final` only. An output stays valid only while the raw image and
+its boxes still match the approval it was written under, and the file on
+disk is the one that was written. Every command here (and detect.py and
+redact.py) deletes outputs that no longer pass, so nothing unapproved is
+left outside raw/. line-pr uploads only what `eligible` prints.
 """
 
 import argparse
@@ -23,7 +29,8 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from evidence_lib import PHASES, STEP, Feature, die, load_json, now_iso, parse_plan, save_json, slug  # noqa: E402
+from evidence_lib import (PHASES, STEP, Feature, die, is_approved, load_json, now_iso, parse_plan,  # noqa: E402
+                          save_json, sha256_file, slug)
 
 
 def load(feat):
@@ -52,6 +59,41 @@ def find(m, rel_raw):
     return None, None
 
 
+def current(feat, entry):
+    """True when the entry's redacted file is still backed by a valid approval."""
+    if not entry.get("redacted") or not entry.get("approved"):
+        return False
+    out = os.path.join(feat.evidence, entry["redacted"])
+    raw = os.path.join(feat.evidence, entry["raw"])
+    if not (os.path.exists(out) and os.path.exists(raw)):
+        return False
+    data = load_json(feat.box_path(raw), None)
+    return (is_approved(data, raw) and data["approved"]["hash"] == entry.get("approval")
+            and sha256_file(out) == entry.get("redacted_sha256"))
+
+
+def drop_output(feat, entry):
+    """Delete an entry's redacted file and clear its approval."""
+    if entry.get("redacted"):
+        out = os.path.join(feat.evidence, entry["redacted"])
+        if os.path.exists(out):
+            os.remove(out)
+            print(f"removed stale {entry['redacted']}")
+    entry.update(redacted=None, approved=False, approval=None, redacted_sha256=None)
+
+
+def sweep(feat, m=None):
+    """Delete every redacted output that is no longer approved; save when anything changed."""
+    own = m is None
+    m = m or load(feat)
+    stale = [e for _, e in entries(m) if (e.get("redacted") or e.get("approved")) and not current(feat, e)]
+    for e in stale:
+        drop_output(feat, e)
+    if stale and own:
+        save(feat, m)
+    return m
+
+
 def output_name(m, step, entry):
     """<step>-<platform>-<phase>.png, with -2, -3... when another entry already has the name."""
     base = f"{step}-{slug(entry['platform'])}-{entry['phase']}"
@@ -78,6 +120,7 @@ def cmd_pick(feat, m, a):
         rel = feat.rel(feat.raw_image(r))
         old_step, old = find(m, rel)
         if old:
+            drop_output(feat, old)
             m["steps"][old_step].remove(old)
             if not m["steps"][old_step]:
                 del m["steps"][old_step]
@@ -94,6 +137,7 @@ def cmd_unpick(feat, m, a):
         if not e:
             print(f"not picked: {rel}")
             continue
+        drop_output(feat, e)
         m["steps"][step].remove(e)
         if not m["steps"][step]:
             del m["steps"][step]
@@ -109,6 +153,12 @@ def cmd_set(feat, m, a):
         for e in hits:
             e["in_pr"] = flag
             print(f"in_pr={flag}: {e['raw']}")
+
+
+def cmd_eligible(feat, m, a):
+    for step, e in entries(m):
+        if e.get("in_pr") and current(feat, e):
+            print(f"{step}\t{e['phase']}\t{e['platform']}\t{os.path.join(feat.evidence, e['redacted'])}")
 
 
 def cmd_show(feat, m, a):
@@ -137,11 +187,13 @@ def main():
     p.add_argument("--in-pr", required=True, choices=["yes", "no"])
     p.add_argument("targets", nargs="+")
     sub.add_parser("show")
+    sub.add_parser("eligible")
     a = ap.parse_args()
     feat = Feature(a.feature, a.plan)
     m = load(feat)
-    {"pick": cmd_pick, "unpick": cmd_unpick, "set": cmd_set, "show": cmd_show}[a.cmd](feat, m, a)
-    if a.cmd != "show":
+    sweep(feat, m)
+    {"pick": cmd_pick, "unpick": cmd_unpick, "set": cmd_set, "show": cmd_show, "eligible": cmd_eligible}[a.cmd](feat, m, a)
+    if os.path.exists(feat.manifest) or m["steps"]:
         save(feat, m)
 
 
