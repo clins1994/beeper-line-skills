@@ -210,6 +210,8 @@ def main():
             continue
         ok, note = build(*spec, a.out_dir)
         fname = f"{num:02d}-{name}.{ext}"
+        if not ok and os.path.exists(os.path.join(a.out_dir, fname)):
+            os.remove(os.path.join(a.out_dir, fname))  # ffmpeg can leave a partial file behind
         (made if ok else skipped).append((fname, f"{num:02d}-{name}", note, os.path.join(a.out_dir, fname)))
 
     # Rebuild the manifest from every sample on disk, so a partial rerun
