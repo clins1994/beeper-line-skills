@@ -11,14 +11,17 @@ Works on macOS, Linux and Windows. Needs Python 3.8+ and Pillow. ffmpeg is optio
 here is skipped and listed at the end; nothing is faked.
 
 Usage:
-    python3 make-samples.py OUT_DIR [--kinds image,animated,video,shape] [--only 01,10,13]
+    python3 make-samples.py OUT_DIR [--kinds image,animated,video,shape,ladder] [--only 01,10,13]
+
+`ladder` is the size ladder: animated GIFs of about 5, 10, 20 and 27 MB (22 to 27 MB
+of random noise in total is too heavy for a default run), so it is only built when asked
+for with --kinds ladder or --only. The other kinds are the default.
 
 Writes OUT_DIR/<NN>-<name>.<ext> and OUT_DIR/MANIFEST.txt (file name, label, size).
 Copy the labels into the `## Test data` section of PLAN.md.
 """
 
 import argparse
-import io
 import os
 import shutil
 import subprocess
@@ -68,7 +71,20 @@ SPECS = [
     (19, "large-4096", "jpg", "shape", 4096, 4096),
     (20, "tiny-64x64", "png", "shape", 64, 64),
     (21, "animated-large", "gif", "animated", 1080, 1080),
+    (22, "animated-transparent", "gif", "animated", 480, 480),
+    (23, "animated-tiny", "gif", "animated", 32, 32),
+    (24, "animated-27mb", "gif", "ladder", 480, 480),
+    (25, "animated-wide", "gif", "animated", 960, 360),
+    (26, "animated-tall", "gif", "animated", 360, 960),
+    (27, "animated-square", "gif", "animated", 600, 600),
+    (28, "animated-5mb", "gif", "ladder", 480, 480),
+    (29, "animated-10mb", "gif", "ladder", 480, 480),
+    (30, "animated-20mb", "gif", "ladder", 480, 480),
 ]
+
+# Size ladder targets in megabytes (decimal). The file lands a little under the target,
+# so "20mb" stays below a 20 MB limit measured in either MB or MiB.
+LADDER_MB = {24: 27, 28: 5, 29: 10, 30: 20}
 
 
 def font(size):
@@ -113,6 +129,45 @@ def frames(w, h, label, count=12):
     return [frame(w, h, label, i, count) for i in range(count)]
 
 
+def noisy_frame(w, h, label, index):
+    """A frame whose top and bottom thirds are random noise (it barely compresses, so the
+    file size is predictable) and whose middle band and corners keep the label and markers."""
+    base = frame(w, h, label, index, 1000)
+    # 6 bits of noise per pixel leaves most of the 256 colours to the label and markers
+    noise = Image.frombytes("L", (w, h), bytes(b & 0xFC for b in os.urandom(w * h))).convert("RGB")
+    band = (0, h // 3, w, 2 * h // 3)
+    noise.paste(base.crop(band), band[:2])
+    m = max(min(w, h) // 8, 3)
+    for _, (cx, cy) in MARKERS:
+        box = (0 if cx == 0 else w - m, 0 if cy == 0 else h - m)
+        noise.paste(base.crop(box + (box[0] + m, box[1] + m)), box)
+    return noise.convert("P", palette=Image.ADAPTIVE)
+
+
+def save_gif(path, fr):
+    fr[0].save(path, save_all=True, append_images=fr[1:], duration=100, loop=0)
+    return os.path.getsize(path)
+
+
+def build_ladder(out, w, h, label, megabytes):
+    """Animated GIF of about `megabytes` MB: add noisy frames until just under the target."""
+    target = int(megabytes * 1_000_000 * 0.985)
+    fr = [noisy_frame(w, h, label, 0)]
+    per_frame = save_gif(out, fr)
+    count = max(2, target // max(per_frame, 1))
+    for _ in range(8):
+        while len(fr) < count:
+            fr.append(noisy_frame(w, h, label, len(fr)))
+        del fr[count:]
+        size = save_gif(out, fr)
+        if size <= target and size >= target * 0.97:
+            return
+        count = max(2, int(count * target / size))
+    while size > target and len(fr) > 2:  # settle just under the target
+        fr.pop()
+        size = save_gif(out, fr)
+
+
 def ffmpeg(args):
     r = subprocess.run([FFMPEG, "-hide_banner", "-loglevel", "error", "-y"] + args,
                        stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
@@ -140,7 +195,21 @@ def build(num, name, ext, kind, w, h, out_dir):
     out = os.path.join(out_dir, f"{label}.{ext}")
     transparent = name == "static-transparent"
     try:
+        if kind == "ladder":
+            build_ladder(out, w, h, label, LADDER_MB[num])
+            return True, ""
         if kind == "animated":
+            if name == "animated-transparent":
+                fr = [frame(w, h, label, i, 12, transparent=True) for i in range(12)]
+                pal = []
+                for f in fr:  # index 255 is the transparent colour; disposal 2 clears each frame
+                    p = f.convert("RGB").convert("P", palette=Image.ADAPTIVE, colors=255)
+                    p.paste(255, f.getchannel("A").point(lambda a: 255 if a < 128 else 0))
+                    p.info["transparency"] = 255
+                    pal.append(p)
+                pal[0].save(out, save_all=True, append_images=pal[1:], duration=100, loop=0,
+                            transparency=255, disposal=2)
+                return True, ""
             fr = frames(w, h, label)
             if ext == "gif":
                 fr = [f.convert("P", palette=Image.ADAPTIVE) for f in fr]
@@ -195,10 +264,12 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("out_dir")
     ap.add_argument("--kinds", default="image,animated,video,shape",
-                    help="comma list of: image, animated, video, shape (default: all)")
+                    help="comma list of: image, animated, video, shape, ladder "
+                         "(default: all but ladder, the 5-27 MB size ladder)")
     ap.add_argument("--only", default="", help="comma list of sample numbers, e.g. 1,10,13")
     a = ap.parse_args()
 
+    # --only names files outright, whatever --kinds says (the ladder is only built that way or with --kinds ladder)
     kinds = {k.strip() for k in a.kinds.split(",") if k.strip()}
     only = {int(x) for x in a.only.split(",") if x.strip()}
     os.makedirs(a.out_dir, exist_ok=True)
@@ -211,7 +282,10 @@ def main():
     try:
         for spec in SPECS:
             num, name, ext, kind, w, h = spec
-            if kind not in kinds or (only and num not in only):
+            if only:
+                if num not in only:
+                    continue
+            elif kind not in kinds:
                 continue
             ok, note = build(*spec, scratch)
             fname = f"{num:02d}-{name}.{ext}"

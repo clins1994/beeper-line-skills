@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "beeper-line",
+  "version": "0.3.0",
+  "description": "Agent skills for the beeper/line Matrix bridge: capture, redact and analyze LINE Chrome Extension traffic, and implement bridge features that match it.",
+  "author": {
+    "name": "Caio Lins",
+    "url": "https://github.com/clins1994"
+  },
+  "repository": "https://github.com/clins1994/beeper-line-skills",
+  "license": "MIT",
+  "keywords": [
+    "line",
+    "matrix",
+    "bridge",
+    "reverse-engineering",
+    "network-capture"
+  ]
+}
