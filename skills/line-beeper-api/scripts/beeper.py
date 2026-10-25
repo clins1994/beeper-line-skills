@@ -385,7 +385,9 @@ def cmd_snapshot(args):
     snap = {"chat": chat.get("label"), "chatID": chat["id"],
             "taken": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "label": args.label,
             "messages": [summarize(m) for m in msgs]}
-    Path(args.output).write_text(json.dumps(snap, indent=2, ensure_ascii=False) + "\n")
+    output = Path(args.output)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(snap, indent=2, ensure_ascii=False) + "\n")
     print(f"wrote {len(msgs)} message(s) to {args.output}")
 
 
