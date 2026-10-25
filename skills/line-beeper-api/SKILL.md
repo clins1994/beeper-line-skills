@@ -69,7 +69,8 @@ python3 $S allow remove <chatID|label>
 ## Commands
 
 A chat can be given as its ID (`!…:beeper.local`), its local number, or its
-label from the allowlist.
+label from the allowlist. When a label names more than one allowed chat, the
+script refuses (exit code 3); use the chat ID.
 
 ```bash
 python3 $S messages <chat> [--limit 20]                   # one line per message

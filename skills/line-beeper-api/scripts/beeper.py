@@ -126,15 +126,29 @@ def save_allowlist(data):
         pass
 
 
+def match_allowed(chats, ref):
+    """Allowlist entries that `ref` names: an exact chat ID wins, else every
+    entry whose local chat ID or label equals it. Dies when that is more than one."""
+    by_id = [c for c in chats if c["id"] == ref]
+    if by_id:
+        return by_id
+    found = [c for c in chats if ref in (c.get("localChatID"), c.get("label"))]
+    if len(found) > 1:
+        die(f"'{ref}' names {len(found)} allowed chats: "
+            + ", ".join(f"{c.get('label')} ({c['id']})" for c in found)
+            + ". Use the chat ID.", code=3)
+    return found
+
+
 def resolve_allowed(ref):
     """Return the allowlist entry for a chat ID, local chat ID or exact label."""
     chats = load_allowlist()["chats"]
     if not chats:
         die(f"the allowlist is empty ({allowlist_path()}). Run `discover`, ask the user "
             "which test chats to allow, then `allow add <chatID>`.", code=3)
-    for c in chats:
-        if ref in (c["id"], c.get("localChatID"), c.get("label")):
-            return c
+    found = match_allowed(chats, ref)
+    if found:
+        return found[0]
     die(f"chat '{ref}' is not in the allowlist. Allowed: "
         + ", ".join(f"{c.get('label')} ({c.get('localChatID') or c['id']})" for c in chats)
         + ". Ask the user before adding it with `allow add`.", code=3)
@@ -301,8 +315,8 @@ def cmd_allow(args):
             print(f"allowed: {chat.get('title')} ({chat['id']})")
     else:
         before = len(data["chats"])
-        data["chats"] = [c for c in data["chats"]
-                         if not {c["id"], c.get("localChatID"), c.get("label")} & set(args.chats)]
+        drop = {c["id"] for ref in args.chats for c in match_allowed(data["chats"], ref)}
+        data["chats"] = [c for c in data["chats"] if c["id"] not in drop]
         print(f"removed {before - len(data['chats'])} chat(s)")
     save_allowlist(data)
 
