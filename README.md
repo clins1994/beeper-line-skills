@@ -35,6 +35,7 @@ The plugin names each skill `beeper-line:<skill>`, for example `/beeper-line:lin
 | [line-test-plan](skills/line-test-plan/SKILL.md) | Writes the numbered test plan (`test/<feature>/PLAN.md`) before any capture or code: sections, step IDs, before/capture/after phases, Result column, and labeled sample media when the feature needs files. Works on macOS, Linux and Windows (Git Bash). |
 | [line-capture](skills/line-capture/SKILL.md) | Checks dependencies, then launches Chrome with a CDP recorder and net-log to record LINE Chrome Extension traffic. Works on macOS, Linux and Windows (Git Bash). |
 | [line-analyze](skills/line-analyze/SKILL.md) | Parses a capture, redacts tokens and MIDs, and compares the traffic with `pkg/line` and `pkg/connector`. |
+| [line-evidence](skills/line-evidence/SKILL.md) | Turns a feature's test screenshots into PR-ready evidence: collects them, lets you pick from a local contact sheet, covers names, faces, phone numbers, emails and MIDs found with on-device OCR, and writes approved, metadata-free PNGs plus a manifest. Raw screenshots never leave the machine. |
 
 ```
 line-implement ──► line-test-plan (optional)
@@ -45,6 +46,7 @@ line-implement ──► line-test-plan (optional)
 
 - A checkout (clone, fork or worktree) of `beeper/line`. Run your agent from it.
 - Google Chrome (Chromium on Linux), Python 3.8+ and the Python package `websocket-client`. `line-capture` checks these and the agent offers to install what is missing.
+- `line-evidence` needs Python 3.8+ with Pillow, and an OCR engine: Apple Vision on macOS (through `swiftc`), tesseract elsewhere. Its preflight checks these.
 - The LINE login is always manual. The skills never ask for, store or automate credentials.
 
 Raw captures contain access tokens, cookies, MIDs and message bodies. Keep them in a temporary folder, redact before you quote anything, and never commit them.
