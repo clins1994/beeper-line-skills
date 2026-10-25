@@ -16,7 +16,7 @@ npx skills add clins1994/beeper-line-skills --skill='*' -g      # all skills, gl
 npx skills add clins1994/beeper-line-skills --skill line-implement -a claude-code
 ```
 
-Install `line-implement` together with `line-capture` and `line-analyze`: it uses their scripts. `line-test-plan` works on its own. Update later with `npx skills update`.
+Install `line-implement` together with `line-capture` and `line-analyze`: it uses their scripts. `line-test-plan` and `line-evidence` work on their own. Update later with `npx skills update`.
 
 As a Claude Code plugin (updates with `claude plugin update`):
 
@@ -40,6 +40,7 @@ The plugin names each skill `beeper-line:<skill>`, for example `/beeper-line:lin
 ```
 line-implement ──► line-test-plan (optional)
                ──► line-capture ──► line-analyze
+               ──► line-evidence (optional)
 ```
 
 ## Requirements
